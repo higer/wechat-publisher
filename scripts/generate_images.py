@@ -28,25 +28,55 @@ import urllib.error
 
 def generate_doubao(api_key: str, prompt: str, size: str, **kwargs) -> bytes:
     """Generate image via Doubao Seedream (Volcengine ARK). Returns image bytes."""
+    import math
+
     model = kwargs.get("model", "doubao-seedream-5-0-260128")
 
-    # Map requested size to nearest Seedream-supported size
+    # Seedream recommended sizes (ratio -> WxH) at 2K resolution
+    RECOMMENDED = {
+        (1, 1): (2048, 2048),
+        (4, 3): (2304, 1728),
+        (3, 4): (1728, 2304),
+        (16, 9): (2848, 1600),
+        (9, 16): (1600, 2848),
+        (3, 2): (2496, 1664),
+        (2, 3): (1664, 2496),
+        (21, 9): (3136, 1344),
+    }
+
     w, h = map(int, size.split("x"))
-    total_px = w * h
     ratio = w / h
 
-    # Seedream 5.0 lite: min total pixels 3686400 (2560x1440), max 16777216 (4096x4096)
-    # If requested size is below minimum, scale up proportionally
-    MIN_PX = 3686400
-    if total_px < MIN_PX:
-        scale = (MIN_PX / total_px) ** 0.5
-        w = int(w * scale)
-        h = int(h * scale)
-        # Ensure even numbers
+    # Find closest recommended size by aspect ratio
+    best_key = None
+    best_diff = float("inf")
+    for (rw, rh) in RECOMMENDED:
+        diff = abs(ratio - rw / rh)
+        if diff < best_diff:
+            best_diff = diff
+            best_key = (rw, rh)
+
+    # If close enough to a standard ratio, use the recommended size directly
+    if best_diff < 0.15:
+        sw, sh = RECOMMENDED[best_key]
+    else:
+        # Custom ratio: scale up to meet minimum pixel requirement
+        MIN_PX = 3686400
+        total_px = w * h
+        if total_px < MIN_PX:
+            scale = math.ceil(math.sqrt(MIN_PX / total_px) * 100) / 100  # round up
+            w = math.ceil(w * scale)
+            h = math.ceil(h * scale)
+        # Ensure even numbers (some models prefer it)
         w = w if w % 2 == 0 else w + 1
         h = h if h % 2 == 0 else h + 1
+        # Final safety check
+        while w * h < MIN_PX:
+            w += 2
+        sw, sh = w, h
 
-    seedream_size = f"{w}x{h}"
+    seedream_size = f"{sw}x{sh}"
+    print(f"  Seedream size: {size} -> {seedream_size} ({sw*sh:,} px)")
 
     url = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
     payload = json.dumps({
