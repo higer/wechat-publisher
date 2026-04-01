@@ -17,10 +17,32 @@ Generate and publish WeChat Official Account articles to the draft box. The work
 article writing, AI image generation, Markdown formatting, HTML conversion, and WeChat API
 publishing.
 
+## Configuration
+
+All config lives in `.wx_config.json`, located in the **current working directory** (the directory where the skill is invoked). If the file does not exist, ask the user for credentials and create it.
+
+```json
+{
+  "app_id": "your_wechat_app_id",
+  "app_secret": "your_wechat_app_secret",
+  "image_api": {
+    "provider": "openai",
+    "api_key": "sk-..."
+  }
+}
+```
+
+Fields:
+- `app_id` / `app_secret` (required for publishing): WeChat MP credentials, obtain from [mp.weixin.qq.com](https://mp.weixin.qq.com) → 开发 → 基本配置
+- `image_api` (optional): AI image generation config
+  - `provider`: `"openai"` (DALL-E 3) or `"stability"` (Stability AI SDXL)
+  - `api_key`: the corresponding API key
+  - If omitted, the skill falls back to MuleRun built-in `mulerouter-skills` (when available) or generates prompt text files for manual image creation
+
 ## Workflow Overview
 
 1. **Generate article** — Write a Markdown article with Front Matter based on user's title and style
-2. **Generate images** — Create 1 cover image (900×383) and 2 content images via MuleRun image generation
+2. **Generate images** — Create 1 cover (900×383) + 2 content images via AI (multi-provider)
 3. **Convert to HTML** — Run `scripts/md_to_html.py` to produce inline-styled HTML for WeChat
 4. **Publish to draft** — Run `scripts/publish_to_wechat.py` to upload images and create draft
 
@@ -72,25 +94,44 @@ Rules:
 
 ## Step 2: Generate Images
 
-Use the `mulerouter-skills` image generation capability to create 3 images.
+Generate 3 images: 1 cover + 2 content images. The generation strategy depends on the environment:
 
-### Cover image
-- Prompt: derive from article title and content, visually striking, clean composition
-- Size: 900×383 (or closest 2.35:1 ratio)
-- Style: modern, minimal, relevant to topic
-- Save as `cover.png`
+### Provider priority
 
-### Content images (×2)
-- Prompt: derive from the surrounding paragraph context
-- Size: 1080×720 (3:2 ratio)
-- Style: match the article tone
-- Save as `content_1.png`, `content_2.png`
+1. **External API** (if `image_api` configured in `.wx_config.json`): run `scripts/generate_images.py`
+2. **MuleRun built-in** (if `mulerouter-skills` is available): use it directly
+3. **Fallback**: `scripts/generate_images.py` saves `.prompt.txt` files with detailed prompts for manual creation
 
-Image prompt guidelines:
-- Be specific and descriptive (scene, lighting, color palette, style)
-- Include "no text, no watermark" to keep images clean
-- For tech articles: "flat illustration, clean lines, soft gradients"
-- For lifestyle: "warm photography style, natural lighting, shallow depth of field"
+### Using generate_images.py (external API or fallback)
+
+```bash
+python scripts/generate_images.py \
+  --config .wx_config.json \
+  --prompts "cover prompt here" "content image 1 prompt" "content image 2 prompt" \
+  --sizes 900x383 1080x720 1080x720 \
+  --output-dir ./images \
+  --names cover.png content_1.png content_2.png
+```
+
+### Using mulerouter-skills (MuleRun environment)
+
+Call `mulerouter-skills` directly to generate each image with the prompts below.
+
+### Image specifications
+
+| Image | Size | Filename |
+|-------|------|----------|
+| Cover | 900×383 (2.35:1) | `cover.png` |
+| Content 1 | 1080×720 (3:2) | `content_1.png` |
+| Content 2 | 1080×720 (3:2) | `content_2.png` |
+
+### Prompt guidelines
+- Derive cover prompt from article title; content prompts from surrounding paragraphs
+- Be specific: scene, lighting, color palette, art style
+- Always include "no text, no watermark" for clean output
+- Tech articles: "flat illustration, clean lines, soft gradients, modern tech aesthetic"
+- Lifestyle: "warm photography, natural lighting, shallow depth of field"
+- Business: "professional, data visualization, corporate blue tones"
 
 ## Step 3: Convert to HTML
 
@@ -108,14 +149,8 @@ This produces WeChat-compatible HTML with inline CSS. The converter:
 ## Step 4: Publish to Draft Box
 
 ### Prerequisites
-Ensure a config file exists at `.wx_config.json`:
-```json
-{
-  "app_id": "your_wechat_app_id",
-  "app_secret": "your_wechat_app_secret"
-}
-```
-If missing, ask the user to provide their AppID and AppSecret, then create the file.
+Ensure `.wx_config.json` exists in the current working directory (see **Configuration** section above).
+If missing, ask the user for AppID and AppSecret, then create the file.
 
 ### Publish command
 
@@ -156,6 +191,7 @@ Users may request only part of the pipeline. Support these independently:
 ## Resources
 
 - `scripts/publish_to_wechat.py` — WeChat API client (token, upload, draft creation)
+- `scripts/generate_images.py` — Multi-provider AI image generator (OpenAI / Stability AI / fallback)
 - `scripts/md_to_html.py` — Markdown to inline-styled HTML converter
 - `references/wechat_api.md` — WeChat MP API endpoints and error codes
 - `references/article_styles.md` — Writing style definitions and Front Matter template
