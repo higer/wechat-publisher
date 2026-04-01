@@ -26,8 +26,8 @@ All config lives in `.wx_config.json`, located in the **current working director
   "app_id": "your_wechat_app_id",
   "app_secret": "your_wechat_app_secret",
   "image_api": {
-    "provider": "openai",
-    "api_key": "sk-..."
+    "provider": "doubao",
+    "api_key": "your-ark-api-key"
   }
 }
 ```
@@ -35,8 +35,9 @@ All config lives in `.wx_config.json`, located in the **current working director
 Fields:
 - `app_id` / `app_secret` (required for publishing): WeChat MP credentials, obtain from [mp.weixin.qq.com](https://mp.weixin.qq.com) → 开发 → 基本配置
 - `image_api` (optional): AI image generation config
-  - `provider`: `"openai"` (DALL-E 3) or `"stability"` (Stability AI SDXL)
+  - `provider`: `"doubao"` (Seedream 5.0 lite, recommended), `"openai"` (DALL-E 3), or `"stability"` (Stability AI SDXL)
   - `api_key`: the corresponding API key
+  - `model` (optional, doubao only): override model ID, default `doubao-seedream-5-0-260128`
   - If omitted, the skill falls back to MuleRun built-in `mulerouter-skills` (when available) or generates prompt text files for manual image creation
 
 ## Workflow Overview

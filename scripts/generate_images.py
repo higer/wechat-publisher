@@ -3,6 +3,7 @@
 Generate images for WeChat articles using external AI image APIs.
 
 Supported providers:
+  - doubao   : Doubao Seedream 5.0 lite (requires Volcengine ARK API key)
   - openai   : DALL-E 3 (requires OpenAI API key)
   - stability: Stability AI SDXL (requires Stability API key)
 
@@ -25,7 +26,53 @@ import urllib.request
 import urllib.error
 
 
-def generate_openai(api_key: str, prompt: str, size: str) -> bytes:
+def generate_doubao(api_key: str, prompt: str, size: str, **kwargs) -> bytes:
+    """Generate image via Doubao Seedream (Volcengine ARK). Returns image bytes."""
+    model = kwargs.get("model", "doubao-seedream-5-0-260128")
+
+    # Map requested size to nearest Seedream-supported size
+    w, h = map(int, size.split("x"))
+    total_px = w * h
+    ratio = w / h
+
+    # Seedream 5.0 lite: min total pixels 3686400 (2560x1440), max 16777216 (4096x4096)
+    # If requested size is below minimum, scale up proportionally
+    MIN_PX = 3686400
+    if total_px < MIN_PX:
+        scale = (MIN_PX / total_px) ** 0.5
+        w = int(w * scale)
+        h = int(h * scale)
+        # Ensure even numbers
+        w = w if w % 2 == 0 else w + 1
+        h = h if h % 2 == 0 else h + 1
+
+    seedream_size = f"{w}x{h}"
+
+    url = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+    payload = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "size": seedream_size,
+        "response_format": "b64_json",
+        "watermark": False,
+    }, ensure_ascii=False).encode("utf-8")
+
+    req = urllib.request.Request(url, data=payload)
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Authorization", f"Bearer {api_key}")
+
+    try:
+        resp = urllib.request.urlopen(req, timeout=180)
+        data = json.loads(resp.read().decode())
+        b64 = data["data"][0]["b64_json"]
+        return base64.b64decode(b64)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        print(f"[ERROR] Doubao Seedream API error: {e.code} {body}", file=sys.stderr)
+        sys.exit(1)
+
+
+def generate_openai(api_key: str, prompt: str, size: str, **kwargs) -> bytes:
     """Generate image via OpenAI DALL-E 3. Returns PNG bytes."""
     # Map to nearest supported DALL-E 3 size
     w, h = map(int, size.split("x"))
@@ -61,7 +108,7 @@ def generate_openai(api_key: str, prompt: str, size: str) -> bytes:
         sys.exit(1)
 
 
-def generate_stability(api_key: str, prompt: str, size: str) -> bytes:
+def generate_stability(api_key: str, prompt: str, size: str, **kwargs) -> bytes:
     """Generate image via Stability AI. Returns PNG bytes."""
     w, h = map(int, size.split("x"))
     # Stability requires dimensions as multiples of 64
@@ -106,6 +153,7 @@ def fallback_prompt_only(prompt: str, output_path: str):
 
 
 GENERATORS = {
+    "doubao": generate_doubao,
     "openai": generate_openai,
     "stability": generate_stability,
 }
@@ -139,6 +187,7 @@ def main():
     image_cfg = config.get("image_api", {})
     provider = image_cfg.get("provider", "")
     api_key = image_cfg.get("api_key", "")
+    extra_opts = {k: v for k, v in image_cfg.items() if k not in ("provider", "api_key")}
 
     generator = GENERATORS.get(provider) if provider and api_key else None
 
@@ -149,7 +198,7 @@ def main():
 
         if generator:
             print(f"  Using provider: {provider}")
-            img_bytes = generator(api_key, prompt, size)
+            img_bytes = generator(api_key, prompt, size, **extra_opts)
             with open(output_path, "wb") as f:
                 f.write(img_bytes)
             print(f"  [OK] Saved to {output_path} ({len(img_bytes)} bytes)")
@@ -158,8 +207,8 @@ def main():
 
     if not generator:
         print("\n⚠️  No image API configured. To enable AI image generation, add to .wx_config.json:")
-        print('  "image_api": { "provider": "openai", "api_key": "sk-..." }')
-        print('  Supported providers: "openai", "stability"')
+        print('  "image_api": { "provider": "doubao", "api_key": "your-ark-api-key" }')
+        print('  Supported providers: "doubao" (Seedream), "openai" (DALL-E 3), "stability" (SDXL)')
 
 
 if __name__ == "__main__":

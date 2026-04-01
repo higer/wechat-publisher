@@ -60,3 +60,49 @@
 | 45009 | API call frequency limit       |
 | 45028 | No publishing permission       |
 | 48001 | API not authorized for account |
+
+## Doubao Seedream Image Generation API
+
+### Overview
+- Provider: Volcengine ARK (火山方舟)
+- Model: `doubao-seedream-5-0-260128` (Seedream 5.0 lite)
+- Endpoint: `POST https://ark.cn-beijing.volces.com/api/v3/images/generations`
+- Auth: `Authorization: Bearer <ARK_API_KEY>`
+- API Key: obtain from [console.volcengine.com/ark → API Key](https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey)
+
+### Request body
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "prompt": "提示词，支持中英文",
+  "size": "2048x2048",
+  "response_format": "b64_json",
+  "watermark": false
+}
+```
+
+### Key parameters
+- `size`: pixel dimensions `WxH` or resolution keyword (`2K`, `4K`)
+  - 5.0 lite: min 2560×1440 (3.69M px), max 4096×4096 (16.78M px)
+  - Recommended: `2048x2048` (1:1), `2304x1728` (4:3), `2848x1600` (16:9)
+- `response_format`: `"url"` (24h expiry) or `"b64_json"`
+- `watermark`: `true` adds "AI生成" watermark; `false` to disable
+- `sequential_image_generation`: `"auto"` for multi-image sets, `"disabled"` for single image
+
+### Response
+```json
+{
+  "model": "doubao-seedream-5-0-260128",
+  "created": 1757321139,
+  "data": [{ "b64_json": "...", "size": "2048x2048" }],
+  "usage": { "generated_images": 1, "output_tokens": 16384, "total_tokens": 16384 }
+}
+```
+
+### Available models
+| Model ID | Notes |
+|----------|-------|
+| `doubao-seedream-5-0-260128` | Seedream 5.0 lite — highest quality, supports web search |
+| `doubao-seedream-4.5` | Good quality, supports 1K/2K/4K |
+| `doubao-seedream-4.0` | Stable, supports 2K/3K |
+| `doubao-seedream-3.0-t2i` | Text-to-image only, min 512×512 |
